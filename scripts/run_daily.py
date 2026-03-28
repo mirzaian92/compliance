@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from app.config import get_settings
-from app.scheduler import Schedule, now_utc, should_run_now
+from app.scheduler import Schedule, now_utc, to_local
 
 
 def main() -> int:
@@ -19,14 +20,43 @@ def main() -> int:
         minute=int(settings.digest_minute),
     )
     dt = now_utc()
-    if not should_run_now(dt_utc=dt, schedule=schedule, window_minutes=15):
+
+    # We intentionally do NOT use a narrow window here. GitHub Actions scheduled runs can drift,
+    # and a tight window can miss the intended send time. Instead:
+    # - skip if it's *before* the scheduled local time today (except for a small cross-midnight grace)
+    # - run any time *after* the scheduled local time; `run_daily_flow` is idempotent and will skip
+    #   quickly once the digest has already been sent for the day.
+    local = to_local(dt, schedule.timezone)
+    scheduled_today = local.replace(hour=schedule.hour, minute=schedule.minute, second=0, microsecond=0)
+    if local < scheduled_today:
+        # Grace for schedules near midnight where the runner may start just after midnight.
+        scheduled_yesterday = scheduled_today - timedelta(days=1)
+        if local - scheduled_yesterday >= timedelta(minutes=60):
+            logging.getLogger(__name__).info(
+                "Before scheduled time; skipping (now_local=%s tz=%s hour=%s minute=%s)",
+                local.isoformat(),
+                schedule.timezone,
+                schedule.hour,
+                schedule.minute,
+            )
+            return 0
+
+    if local >= scheduled_today:
         logging.getLogger(__name__).info(
-            "Not within schedule window; skipping (tz=%s hour=%s minute=%s)",
+            "At/after scheduled time; running (now_local=%s tz=%s hour=%s minute=%s)",
+            local.isoformat(),
             schedule.timezone,
             schedule.hour,
             schedule.minute,
         )
-        return 0
+    else:
+        logging.getLogger(__name__).info(
+            "Within cross-midnight grace; running (now_local=%s tz=%s hour=%s minute=%s)",
+            local.isoformat(),
+            schedule.timezone,
+            schedule.hour,
+            schedule.minute,
+        )
 
     # Import here so environment checks happen after logging is configured.
     from app.main import run_daily_flow
@@ -36,4 +66,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
