@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.env
+.env.*
+.venv/
+*.sqlite
+*.db
+output/
+data/
+dist/
+build/
+*.egg-info/
+
+# Windows cmd paste artifacts (accidentally created files)
+File
+Traceback
+import
+ModuleNotFoundError
+
+# Accidental directory created with .ps1 suffix
+run_daily.ps1/
+
+# Local-only git metadata workaround (if `.git/` is ACL-blocked on Windows)
+._gitmeta/

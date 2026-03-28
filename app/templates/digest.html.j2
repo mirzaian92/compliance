@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily Compliance Digest — {{ digest_date }}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #111; }
+      .container { max-width: 760px; margin: 0 auto; padding: 16px; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      h2 { font-size: 16px; margin: 20px 0 8px; }
+      ul { padding-left: 18px; }
+      li { margin: 8px 0; line-height: 1.35; }
+      .meta { color: #555; font-size: 12px; }
+      a { color: #0b57d0; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Daily Compliance Digest — {{ digest_date }}</h1>
+      <div class="meta">Generated: {{ generated_at }}</div>
+
+      {% if total_items == 0 %}
+        <h2>No Significant Updates</h2>
+        <ul>
+          <li>No relevant federal or state updates were classified in the last 24 hours.</li>
+        </ul>
+      {% else %}
+        {% if urgent|length > 0 %}
+          <h2>Urgent</h2>
+          <ul>
+            {% for item in urgent %}
+              <li>
+                <strong>{{ item.jurisdiction_label }}</strong> ({{ item.products_label }}) — {{ item.short_summary }}
+                <br />
+                <span class="meta">Why it matters:</span> {{ item.why_it_matters }}
+                <br />
+                <a href="{{ item.source_url }}">Source</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if federal|length > 0 %}
+          <h2>Federal Updates</h2>
+          <ul>
+            {% for item in federal %}
+              <li>
+                <strong>{{ item.jurisdiction_label }}</strong> ({{ item.products_label }}) — {{ item.short_summary }}
+                <br />
+                <span class="meta">Why it matters:</span> {{ item.why_it_matters }}
+                <br />
+                <a href="{{ item.source_url }}">Source</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if state|length > 0 %}
+          <h2>State Updates</h2>
+          <ul>
+            {% for item in state %}
+              <li>
+                <strong>{{ item.jurisdiction_label }}</strong> ({{ item.products_label }}) — {{ item.short_summary }}
+                <br />
+                <span class="meta">Why it matters:</span> {{ item.why_it_matters }}
+                <br />
+                <a href="{{ item.source_url }}">Source</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if watchlist|length > 0 %}
+          <h2>Watchlist / Proposed</h2>
+          <ul>
+            {% for item in watchlist %}
+              <li>
+                <strong>{{ item.jurisdiction_label }}</strong> ({{ item.products_label }}) — {{ item.short_summary }}
+                <br />
+                <span class="meta">Why it matters:</span> {{ item.why_it_matters }}
+                <br />
+                <a href="{{ item.source_url }}">Source</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endif %}
+    </div>
+  </body>
+</html>
+

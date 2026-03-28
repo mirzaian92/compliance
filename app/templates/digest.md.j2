@@ -1,0 +1,45 @@
+# Daily Compliance Digest — {{ digest_date }}
+
+Generated: {{ generated_at }}
+
+{% if total_items == 0 %}
+## No Significant Updates
+
+- No relevant federal or state updates were classified in the last 24 hours.
+{% else %}
+{% if urgent|length > 0 %}
+## Urgent
+{% for item in urgent %}
+- **{{ item.jurisdiction_label }}** ({{ item.products_label }}) — {{ item.short_summary }}
+  - Why it matters: {{ item.why_it_matters }}
+  - Source: {{ item.source_url }}
+{% endfor %}
+{% endif %}
+
+{% if federal|length > 0 %}
+## Federal Updates
+{% for item in federal %}
+- **{{ item.jurisdiction_label }}** ({{ item.products_label }}) — {{ item.short_summary }}
+  - Why it matters: {{ item.why_it_matters }}
+  - Source: {{ item.source_url }}
+{% endfor %}
+{% endif %}
+
+{% if state|length > 0 %}
+## State Updates
+{% for item in state %}
+- **{{ item.jurisdiction_label }}** ({{ item.products_label }}) — {{ item.short_summary }}
+  - Why it matters: {{ item.why_it_matters }}
+  - Source: {{ item.source_url }}
+{% endfor %}
+{% endif %}
+
+{% if watchlist|length > 0 %}
+## Watchlist / Proposed
+{% for item in watchlist %}
+- **{{ item.jurisdiction_label }}** ({{ item.products_label }}) — {{ item.short_summary }}
+  - Why it matters: {{ item.why_it_matters }}
+  - Source: {{ item.source_url }}
+{% endfor %}
+{% endif %}
+{% endif %}
