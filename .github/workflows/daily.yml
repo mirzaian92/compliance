@@ -5,6 +5,16 @@ on:
     # Runs every 15 minutes; the app enforces DIGEST_TIMEZONE + (DIGEST_HOUR, DIGEST_MINUTE).
     - cron: "*/15 * * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode for manual runs"
+        required: true
+        type: choice
+        default: "dry-run"
+        options:
+          - dry-run
+          - send
+          - force-send
 
 concurrency:
   group: daily-compliance-digest
@@ -17,6 +27,7 @@ jobs:
     env:
       DB_PATH: data/compliance.db
       LOG_LEVEL: INFO
+      APP_ENV: prod
 
       # Sources
       LEGISCAN_API_KEY: ${{ secrets.LEGISCAN_API_KEY }}
@@ -50,5 +61,15 @@ jobs:
             compliance-db-
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run scheduled job
+      - name: Run scheduled job (time-gated)
+        if: github.event_name == 'schedule'
         run: python -m scripts.run_daily
+      - name: Run manual job (dry-run)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'dry-run'
+        run: python -m app.main run-daily --dry-run
+      - name: Run manual job (send)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'send'
+        run: python -m app.main run-daily
+      - name: Run manual job (force-send)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'force-send'
+        run: python -m app.main run-daily --force-send
