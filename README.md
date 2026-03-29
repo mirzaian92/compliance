@@ -135,3 +135,27 @@ Run this every 15 minutes:
 - `scripts/run_daily.sh`
 
 It will only run the pipeline during the schedule window and is protected against duplicate sends per date.
+
+## Dashboard (Next.js)
+
+This repo also includes a simple internal dashboard UI under `dashboard/` (Next.js App Router + TypeScript).
+It does **not** replace the Python pipeline or the daily email workflow. The dashboard is read-only and
+consumes the same SQLite DB the pipeline writes (`DB_PATH`).
+
+### Run the dashboard locally
+
+1. Install Node dependencies:
+   - `cd dashboard`
+   - `npm install`
+2. Point the dashboard at the pipeline DB (recommended):
+   - PowerShell: `$env:DASHBOARD_DB_PATH = "..\\compliance.db"`
+3. Start:
+   - `npm run dev`
+4. Open:
+   - `http://localhost:3000`
+
+### What it shows (v1)
+
+- Homepage: today’s digest date, section counts, and today’s update cards.
+- Left sidebar: all 50 states (placeholder routes).
+- State pages: `/states/[stateCode]` placeholders (no state-specific logic yet).

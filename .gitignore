@@ -25,3 +25,15 @@ run_daily.ps1/
 
 # Local-only git metadata workaround (if `.git/` is ACL-blocked on Windows)
 ._gitmeta/
+
+# Next.js dashboard
+node_modules/
+.next/
+.turbo/
+dashboard/node_modules/
+dashboard/.next/
+dashboard/.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
