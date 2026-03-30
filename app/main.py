@@ -34,6 +34,7 @@ from app.sources import legiscan as legiscan_source
 from app.classify import classify_row
 from app.ai import OpenAIClient
 from app.emailer import ResendEmailer
+from app.export_dashboard import export_dashboard_snapshot
 from app.scheduler import digest_date_iso
 
 
@@ -280,6 +281,45 @@ def show_latest_digest_cmd() -> None:
         typer.echo("No digests found.")
         raise typer.Exit(code=0)
     typer.echo(str(row["markdown_body"]))
+
+
+@app.command("export-dashboard")
+def export_dashboard_cmd(
+    digest_date: str | None = typer.Option(
+        None,
+        help="Digest date (YYYY-MM-DD). Default: computed from DIGEST_TIMEZONE based on current time.",
+    ),
+    out_path: str = typer.Option(
+        "dashboard/public/data/latest.json",
+        help="Output path for the dashboard JSON snapshot.",
+    ),
+) -> None:
+    """
+    Export a JSON snapshot for the Next.js dashboard.
+
+    This lets the dashboard run without direct DB access (e.g., on Vercel).
+    """
+
+    _configure_logging()
+    settings = get_settings()
+    conn = connect(settings.db_path)
+    init_db(conn)
+
+    now = datetime.now(timezone.utc)
+    if digest_date is None:
+        digest_date = digest_date_iso(now, settings.digest_timezone)
+
+    if get_daily_digest(conn, digest_date) is None:
+        typer.echo(f"export-dashboard: no digest found for {digest_date}; skipping")
+        raise typer.Exit(code=0)
+
+    p = export_dashboard_snapshot(
+        conn,
+        digest_date_iso=digest_date,
+        tz_name=settings.digest_timezone,
+        out_path=out_path,
+    )
+    typer.echo(f"export-dashboard: wrote {p}")
 
 
 @app.command("classify-latest")

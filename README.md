@@ -140,19 +140,30 @@ It will only run the pipeline during the schedule window and is protected agains
 
 This repo also includes a simple internal dashboard UI under `dashboard/` (Next.js App Router + TypeScript).
 It does **not** replace the Python pipeline or the daily email workflow. The dashboard is read-only and
-consumes the same SQLite DB the pipeline writes (`DB_PATH`).
+consumes a daily JSON snapshot exported by the pipeline at `dashboard/public/data/latest.json` (committed by GitHub Actions).
 
 ### Run the dashboard locally
 
 1. Install Node dependencies:
    - `cd dashboard`
    - `npm install`
-2. Point the dashboard at the pipeline DB (recommended):
-   - PowerShell: `$env:DASHBOARD_DB_PATH = "..\\compliance.db"`
 3. Start:
    - `npm run dev`
 4. Open:
    - `http://localhost:3000`
+
+### Deploy to Vercel (simple)
+
+1. Import the GitHub repo into Vercel.
+2. Set **Root Directory** to `dashboard/`.
+3. Deploy.
+
+Data flow:
+- GitHub Actions runs the Python pipeline daily (email still sends).
+- After the pipeline builds the digest, it runs `python -m app.main export-dashboard` and commits `dashboard/public/data/latest.json`.
+- Vercel redeploys on every push to `main`, so the dashboard updates once per day after the scheduled run.
+
+If you prefer not to commit digest content to git history, move the snapshot to object storage later (S3/R2) and have the dashboard fetch it.
 
 ### What it shows (v1)
 

@@ -1,42 +1,9 @@
-import fs from "node:fs";
-import path from "node:path";
+// Deprecated: the dashboard now runs from a committed JSON snapshot so it can be deployed to Vercel
+// without requiring SQLite access or native Node modules.
+//
+// This file is intentionally left as a stub for future work if you decide to re-introduce
+// direct DB reads (for example on a long-running server).
 
-import Database from "better-sqlite3";
-
-let _db: Database.Database | null = null;
-
-function resolveDbPath(): string {
-  const explicit =
-    process.env.DASHBOARD_DB_PATH || process.env.DB_PATH || process.env.COMPLIANCE_DB_PATH;
-  if (explicit) return explicit;
-
-  // Defaults:
-  // - local Python runs often use ../compliance.db
-  // - GitHub Actions uses DB_PATH=data/compliance.db (within repo root)
-  const candidates = [
-    path.resolve(process.cwd(), "..", "data", "compliance.db"),
-    path.resolve(process.cwd(), "..", "compliance.db"),
-    path.resolve(process.cwd(), "data", "compliance.db"),
-    path.resolve(process.cwd(), "compliance.db")
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return candidates[0]!;
+export function getDb(): never {
+  throw new Error("SQLite mode is disabled. Use the JSON snapshot produced by `python -m app.main export-dashboard`.");
 }
-
-export function getDb(): Database.Database {
-  if (_db) return _db;
-
-  const dbPath = resolveDbPath();
-  if (!fs.existsSync(dbPath)) {
-    throw new Error(
-      `SQLite DB not found at ${dbPath}. Set DASHBOARD_DB_PATH (recommended) or DB_PATH to the pipeline DB file.`
-    );
-  }
-
-  // Read-only: this UI should not mutate pipeline state.
-  _db = new Database(dbPath, { readonly: true, fileMustExist: true });
-  return _db;
-}
-
