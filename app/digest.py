@@ -158,7 +158,7 @@ def group_for_digest(entries: list[DigestEntry]) -> GroupedDigest:
 def _env() -> Environment:
     template_dir = Path(__file__).parent / "templates"
     return Environment(
-        loader=FileSystemLoader(str(template_dir)),
+        loader=FileSystemLoader(str(template_dir), encoding="utf-8"),
         autoescape=select_autoescape(enabled_extensions=("html", "xml")),
         trim_blocks=True,
         lstrip_blocks=True,

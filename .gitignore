@@ -8,6 +8,8 @@ __pycache__/
 .venv/
 *.sqlite
 *.db
+*.db-wal
+*.db-shm
 output/
 data/
 dist/

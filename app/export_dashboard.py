@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from app.db import get_daily_digest
+from app.db import list_classified_since
+from app.digest import group_for_digest, rows_to_entries
 from app.models import JurisdictionLevel, RiskLevel
 
 
@@ -39,16 +40,6 @@ class SnapshotUpdate:
 
     section: str
     jurisdiction: str
-
-
-def _utc_range_for_local_date(digest_date_iso: str, tz_name: str) -> tuple[str, str]:
-    d = date.fromisoformat(digest_date_iso)
-    tz = ZoneInfo(tz_name)
-    start_local = datetime.combine(d, time(0, 0), tzinfo=tz)
-    end_local = start_local + timedelta(days=1)
-    start_utc = start_local.astimezone(timezone.utc)
-    end_utc = end_local.astimezone(timezone.utc)
-    return start_utc.isoformat(), end_utc.isoformat()
 
 
 def _safe_products(products_json: str | None) -> list[str]:
@@ -88,87 +79,73 @@ def export_dashboard_snapshot(
     tz_name: str,
     out_path: str,
 ) -> Path:
-    start_utc_iso, end_utc_iso = _utc_range_for_local_date(digest_date_iso, tz_name)
-
-    rows = conn.execute(
-        """
-        SELECT
-          id,
-          raw_document_id,
-          jurisdiction_level,
-          jurisdiction_name,
-          state_code,
-          category,
-          products_json,
-          risk_level,
-          action_needed,
-          short_summary,
-          why_it_matters,
-          effective_date,
-          status_label,
-          confidence,
-          source_url,
-          created_at
-        FROM classified_updates
-        WHERE created_at >= ? AND created_at < ?
-        ORDER BY created_at DESC
-        """,
-        (start_utc_iso, end_utc_iso),
-    ).fetchall()
+    # IMPORTANT: The digest is built from `classified_updates` joined to `raw_documents`,
+    # filtered by `raw_documents.published_at >= (generated_at - 24h)`.
+    # To ensure the dashboard matches the email digest, we reproduce that selection logic here.
+    digest_row = get_daily_digest(conn, digest_date_iso)
+    generated_at = None
+    since_iso = None
+    if digest_row and digest_row["created_at"]:
+        generated_at = str(digest_row["created_at"])
+        try:
+            gen_dt = datetime.fromisoformat(generated_at)
+            if gen_dt.tzinfo is None:
+                gen_dt = gen_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            gen_dt = datetime.now(timezone.utc)
+        since_iso = (gen_dt - timedelta(hours=24)).astimezone(timezone.utc).isoformat()
+    else:
+        # Fallback: if we can't find/parse generated_at, export an empty snapshot.
+        generated_at = None
+        since_iso = None
 
     updates: list[SnapshotUpdate] = []
-    for r in rows:
-        jurisdiction_level = str(r["jurisdiction_level"])
-        jurisdiction_name = str(r["jurisdiction_name"])
-        category = str(r["category"])
-        risk_level = str(r["risk_level"])
-        status_label = str(r["status_label"])
-        section = _section_for_update(category, risk_level, status_label, jurisdiction_level)
-        jurisdiction = "Federal" if jurisdiction_level == JurisdictionLevel.federal.value else jurisdiction_name
+    markdown_body = str(digest_row["markdown_body"]) if digest_row else None
 
-        updates.append(
-            SnapshotUpdate(
-                id=int(r["id"]),
-                raw_document_id=int(r["raw_document_id"]),
+    if since_iso:
+        rows = list_classified_since(conn, since_iso=since_iso)
+        entries = rows_to_entries([dict(r) for r in rows])
+        grouped = group_for_digest(entries)
+
+        def _convert(entry, *, section: str) -> SnapshotUpdate:
+            jurisdiction_level = entry.jurisdiction_level.value
+            jurisdiction_name = entry.jurisdiction_name
+            jurisdiction = "Federal" if entry.jurisdiction_level == JurisdictionLevel.federal else (entry.state_code or entry.jurisdiction_name)
+            return SnapshotUpdate(
+                # Use raw_document_id as a stable identifier for UI rendering.
+                id=int(entry.raw_document_id),
+                raw_document_id=int(entry.raw_document_id),
                 jurisdiction_level=jurisdiction_level,
                 jurisdiction_name=jurisdiction_name,
-                state_code=str(r["state_code"]) if r["state_code"] else None,
-                category=category,
-                products=_safe_products(r["products_json"]),
-                risk_level=risk_level,
-                action_needed=bool(r["action_needed"]),
-                short_summary=str(r["short_summary"]),
-                why_it_matters=str(r["why_it_matters"]),
-                effective_date=str(r["effective_date"]) if r["effective_date"] else None,
-                status_label=status_label,
-                confidence=float(r["confidence"]),
-                source_url=str(r["source_url"]),
-                created_at=str(r["created_at"]),
+                state_code=entry.state_code,
+                category=entry.category.value,
+                products=list(entry.products),
+                risk_level=entry.risk_level.value,
+                action_needed=bool(entry.action_needed),
+                short_summary=entry.short_summary,
+                why_it_matters=entry.why_it_matters,
+                effective_date=entry.effective_date,
+                status_label=entry.status_label.value,
+                confidence=float(entry.confidence),
+                source_url=entry.source_url,
+                created_at=entry.published_at,
                 section=section,
                 jurisdiction=jurisdiction,
             )
-        )
 
-    # Sort like the digest: urgent first, then federal, state, watchlist; within section: high->low risk then newest.
-    section_rank = {"Urgent": 0, "Federal": 1, "State": 2, "Watchlist": 3}
-    risk_rank = {"high": 0, "medium": 1, "low": 2}
-    updates.sort(
-        key=lambda u: (
-            section_rank.get(u.section, 99),
-            risk_rank.get(u.risk_level, 99),
-            u.created_at,
-        ),
-        reverse=False,
-    )
-
-    digest_row = get_daily_digest(conn, digest_date_iso)
-    markdown_body = str(digest_row["markdown_body"]) if digest_row else None
-    digest_generated_at = str(digest_row["created_at"]) if digest_row else None
+        for e in grouped.urgent:
+            updates.append(_convert(e, section="Urgent"))
+        for e in grouped.federal:
+            updates.append(_convert(e, section="Federal"))
+        for e in grouped.state:
+            updates.append(_convert(e, section="State"))
+        for e in grouped.watchlist:
+            updates.append(_convert(e, section="Watchlist"))
 
     payload = {
         "digest_date": digest_date_iso,
-        "generated_at": digest_generated_at,
-        "counts": asdict(_counts(updates)),
+        "generated_at": generated_at,
+        "counts": asdict(_counts(updates)) if updates else {"urgent": 0, "federal": 0, "state": 0, "watchlist": 0},
         "updates": [asdict(u) for u in updates],
         "markdown": markdown_body,
     }
@@ -177,4 +154,3 @@ def export_dashboard_snapshot(
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return p
-
