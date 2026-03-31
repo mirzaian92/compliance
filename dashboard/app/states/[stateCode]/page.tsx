@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
 
-import { getStateByCode } from "../../../lib/states";
+import { US_STATES, getStateByCode } from "../../../lib/states";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
+
+export function generateStaticParams() {
+  return US_STATES.map((s) => ({ stateCode: s.code }));
+}
 
 export default function StatePage({ params }: { params: { stateCode: string } }) {
   const code = (params.stateCode || "").toUpperCase();
@@ -18,4 +22,3 @@ export default function StatePage({ params }: { params: { stateCode: string } })
     </div>
   );
 }
-

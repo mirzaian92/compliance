@@ -158,6 +158,9 @@ consumes a daily JSON snapshot exported by the pipeline at `dashboard/public/dat
 2. Set **Root Directory** to `dashboard/`.
 3. Deploy.
 
+Optional (UI timezone label):
+- Set Vercel env var `NEXT_PUBLIC_DIGEST_TIMEZONE` (default: `America/Los_Angeles`).
+
 Data flow:
 - GitHub Actions runs the Python pipeline daily (email still sends).
 - After the pipeline builds the digest, it runs `python -m app.main export-dashboard` and commits `dashboard/public/data/latest.json`.
