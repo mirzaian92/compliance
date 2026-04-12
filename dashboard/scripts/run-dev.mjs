@@ -1,44 +1,28 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const NEXT_BIN = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
-function runNode(scriptPath, args, { captureStderr = false } = {}) {
+function runNode(scriptPath, args) {
   return new Promise((resolve) => {
-    let stderrBuf = "";
     const child = spawn(process.execPath, [scriptPath, ...args], {
-      stdio: ["inherit", "inherit", "pipe"],
+      // Some locked-down Windows environments block spawning when stdio is piped.
+      // Use inherited stdio for reliability.
+      stdio: "inherit",
       env: process.env
     });
 
-    child.stderr.on("data", (d) => {
-      const s = d.toString("utf8");
-      process.stderr.write(s);
-      if (captureStderr && stderrBuf.length < 16_384) stderrBuf += s;
-    });
-
-    child.on("close", (code, signal) => resolve({ code: code ?? 1, signal, stderrBuf }));
-    child.on("error", (err) => resolve({ code: 1, signal: "error", stderrBuf: String(err) }));
+    child.on("close", (code, signal) => resolve({ code: code ?? 1, signal }));
+    child.on("error", () => resolve({ code: 1, signal: "error" }));
   });
 }
 
 async function main() {
   // Try real Next dev server first (best DX), but some locked-down Windows environments
-  // block `child_process.fork` (EPERM). In that case, fall back to a static export + local
-  // static server on port 3000 so the dashboard can still be previewed.
+  // block `child_process.fork` (EPERM). If it fails, fall back to a production preview
+  // using `next build` + `next start` (no fork required).
 
-  const dev = await runNode(NEXT_BIN, ["dev"], { captureStderr: true });
+  const dev = await runNode(NEXT_BIN, ["dev"]);
   if (dev.code === 0) return;
-
-  const looksLikeForkBlocked =
-    dev.stderrBuf.includes("spawn EPERM") || dev.stderrBuf.includes("child_process") || dev.stderrBuf.includes("fork");
-
-  if (!looksLikeForkBlocked) {
-    process.exit(dev.code);
-  }
 
   console.warn(
     "\nNext.js dev server failed due to OS restrictions (child_process.fork -> EPERM). Falling back to production preview...\n"
