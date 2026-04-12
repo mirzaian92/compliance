@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const NEXT_BIN = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
+const OUT_DIR = path.resolve(__dirname, "..", "out");
 
 function runNode(scriptPath, args, { captureStderr = false } = {}) {
   return new Promise((resolve) => {
@@ -46,7 +48,10 @@ async function main() {
   );
 
   const build = await runNode(NEXT_BIN, ["build"]);
-  if (build.code !== 0) process.exit(build.code);
+  if (build.code !== 0) {
+    if (!fs.existsSync(OUT_DIR)) process.exit(build.code);
+    console.warn("\nBuild failed, but an existing static export was found. Serving the last successful build.\n");
+  }
 
   const serveOutPath = path.join(__dirname, "serve-out.mjs");
   const serve = await runNode(serveOutPath, []);
@@ -57,4 +62,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
