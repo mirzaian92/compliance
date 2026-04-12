@@ -35,7 +35,11 @@ node_modules/
 dashboard/node_modules/
 dashboard/.next/
 dashboard/.turbo/
+dashboard/lib/state_laws.generated.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Uploaded artifacts (local)
+compass_artifact_*.md

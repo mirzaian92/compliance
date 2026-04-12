@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 
 import { US_STATES } from "../lib/states";
 
@@ -20,4 +20,3 @@ export default function Sidebar() {
     </nav>
   );
 }
-

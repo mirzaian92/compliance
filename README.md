@@ -172,4 +172,8 @@ If you prefer not to commit digest content to git history, move the snapshot to 
 
 - Homepage: today’s digest date, section counts, and today’s update cards.
 - Left sidebar: all 50 states (placeholder routes).
-- State pages: `/states/[stateCode]` placeholders (no state-specific logic yet).
+- State pages: `/states/[stateCode]` show parsed state law data (if present) from `dashboard/content/state_laws.md`.
+
+State law data pipeline:
+- `npm run dev` / `npm run build` runs `dashboard/scripts/generate-state-laws.mjs` to generate `dashboard/lib/state_laws.generated.json` from the markdown file.
+- If a state section is missing in the markdown, that state page shows an empty-state message.
