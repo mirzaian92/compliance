@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,8 +6,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const NEXT_BIN = path.join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
-const OUT_DIR = path.resolve(__dirname, "..", "out");
-
 function runNode(scriptPath, args, { captureStderr = false } = {}) {
   return new Promise((resolve) => {
     let stderrBuf = "";
@@ -44,18 +41,24 @@ async function main() {
   }
 
   console.warn(
-    "\nNext.js dev server failed due to OS restrictions (child_process.fork -> EPERM). Falling back to static preview...\n"
+    "\nNext.js dev server failed due to OS restrictions (child_process.fork -> EPERM). Falling back to production preview...\n"
   );
 
-  const build = await runNode(NEXT_BIN, ["build"]);
-  if (build.code !== 0) {
-    if (!fs.existsSync(OUT_DIR)) process.exit(build.code);
-    console.warn("\nBuild failed, but an existing static export was found. Serving the last successful build.\n");
-  }
+  // Use "server" mode for local preview (avoids relying on static export outputs and matches Next's normal runtime).
+  // This still keeps the production deploy static by default (see `DASHBOARD_OUTPUT` in `next.config.mjs`).
+  const originalMode = process.env.DASHBOARD_OUTPUT;
+  process.env.DASHBOARD_OUTPUT = "server";
 
-  const serveOutPath = path.join(__dirname, "serve-out.mjs");
-  const serve = await runNode(serveOutPath, []);
-  process.exit(serve.code);
+  const build = await runNode(NEXT_BIN, ["build"]);
+  if (build.code !== 0) process.exit(build.code);
+
+  console.log("\nStarting local preview server on http://localhost:3000 ...\n");
+  const start = await runNode(NEXT_BIN, ["start", "-p", "3000"]);
+
+  if (originalMode === undefined) delete process.env.DASHBOARD_OUTPUT;
+  else process.env.DASHBOARD_OUTPUT = originalMode;
+
+  process.exit(start.code);
 }
 
 main().catch((e) => {

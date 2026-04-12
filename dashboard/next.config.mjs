@@ -1,11 +1,13 @@
 /** @type {import('next').NextConfig} */
+const outputMode = process.env.DASHBOARD_OUTPUT === "server" ? undefined : "export";
+
 const nextConfig = {
   reactStrictMode: true,
   // This dashboard is intentionally static and reads data from a JSON snapshot
   // published by the Python pipeline into `dashboard/public/data/latest.json`.
   // Using static export avoids Serverless Function invocations (and related 500s)
   // for a simple internal "read-only" UI.
-  output: "export",
+  output: outputMode,
   // Windows environments (and some locked-down machines) can fail when Next spawns
   // child processes during build (`spawn EPERM`). Worker threads avoid that.
   experimental: {
