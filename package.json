@@ -1,0 +1,10 @@
+{
+  "name": "compliance-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix dashboard run dev",
+    "serve:out": "npm --prefix dashboard run serve:out",
+    "build": "npm --prefix dashboard run build",
+    "start": "npm --prefix dashboard run start"
+  }
+}

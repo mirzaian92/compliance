@@ -6,9 +6,10 @@
   "scripts": {
     "predev": "node scripts/generate-state-laws.mjs",
     "prebuild": "node scripts/generate-state-laws.mjs",
-    "dev": "next dev",
+    "dev": "node scripts/run-dev.mjs",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "serve:out": "node scripts/serve-out.mjs"
   },
   "dependencies": {
     "luxon": "^3.6.0",
