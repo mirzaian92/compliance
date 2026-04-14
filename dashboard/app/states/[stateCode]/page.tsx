@@ -43,8 +43,14 @@ export default function StatePage({ params }: { params: { stateCode: string } })
   const st = getStateByCode(code);
   if (!st) return notFound();
 
-  const data = stateLaws as unknown as { generated_at: string; states: Record<string, StateLawSection> };
+  const data = stateLaws as unknown as {
+    generated_at: string;
+    states: Record<string, StateLawSection>;
+    provenance?: Record<string, string>;
+  };
   const law = data.states[code];
+  const sourceFile = data.provenance?.[code] ?? null;
+  const loadedCount = Object.keys(data.states).length;
 
   return (
     <>
@@ -57,6 +63,14 @@ export default function StatePage({ params }: { params: { stateCode: string } })
               <>
                 {" "}
                 • Last verified: <strong>{law.last_verified}</strong>
+              </>
+            ) : null}
+            {" "}
+            • States loaded: <strong>{loadedCount}</strong>
+            {sourceFile ? (
+              <>
+                {" "}
+                • Source file: <strong>{sourceFile}</strong>
               </>
             ) : null}
           </div>
