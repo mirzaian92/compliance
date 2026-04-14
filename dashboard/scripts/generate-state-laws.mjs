@@ -175,25 +175,57 @@ function parseMarkdown(md, generatedAt) {
 }
 
 function main() {
-  const inputPath = path.join(process.cwd(), "content", "state_laws.md");
+  const contentDir = path.join(process.cwd(), "content");
   const outPath = path.join(process.cwd(), "lib", "state_laws.generated.json");
 
-  if (!fs.existsSync(inputPath)) {
-    console.error(`state laws input markdown not found: ${inputPath}`);
+  if (!fs.existsSync(contentDir)) {
+    console.error(`state laws content directory not found: ${contentDir}`);
     process.exit(1);
   }
 
-  const inputStats = fs.statSync(inputPath);
-  const generatedAt = inputStats.mtime.toISOString();
-  const md = fs.readFileSync(inputPath, "utf8");
-  const parsed = parseMarkdown(md, generatedAt);
+  const mdFiles = fs
+    .readdirSync(contentDir)
+    .filter((n) => n.toLowerCase().endsWith(".md"))
+    .sort((a, b) => a.localeCompare(b));
+
+  if (mdFiles.length === 0) {
+    console.error(`No markdown files found under: ${contentDir}`);
+    process.exit(1);
+  }
+
+  const inputs = mdFiles.map((name) => {
+    const fullPath = path.join(contentDir, name);
+    const stat = fs.statSync(fullPath);
+    return { name, fullPath, mtimeMs: stat.mtimeMs, mtimeIso: stat.mtime.toISOString() };
+  });
+
+  // Prefer the newest content as the "generated_at" signal so the UI can show when it was last updated.
+  const generatedAt = inputs.reduce((acc, cur) => (cur.mtimeMs > acc.mtimeMs ? cur : acc), inputs[0]).mtimeIso;
+
+  // Merge per-state sections across files. If the same state appears in multiple inputs,
+  // the newest file wins (deterministic; also easiest to reason about).
+  inputs.sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
+  const mergedStates = {};
+  const provenance = {};
+
+  for (const input of inputs) {
+    const md = fs.readFileSync(input.fullPath, "utf8");
+    const parsed = parseMarkdown(md, generatedAt);
+    for (const [code, section] of Object.entries(parsed.states)) {
+      mergedStates[code] = section;
+      provenance[code] = input.name;
+    }
+  }
+
+  const finalDoc = { generated_at: generatedAt, states: mergedStates, provenance };
+
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  const next = JSON.stringify(parsed, null, 2) + "\n";
+  const next = JSON.stringify(finalDoc, null, 2) + "\n";
 
   if (fs.existsSync(outPath)) {
     const prev = fs.readFileSync(outPath, "utf8");
     if (prev === next) {
-      const count = Object.keys(parsed.states).length;
+      const count = Object.keys(finalDoc.states).length;
       console.log(`State laws already up to date (${count} sections).`);
       return;
     }
@@ -201,7 +233,7 @@ function main() {
 
   fs.writeFileSync(outPath, next, "utf8");
 
-  const count = Object.keys(parsed.states).length;
+  const count = Object.keys(finalDoc.states).length;
   console.log(`Generated ${count} state sections -> ${path.relative(process.cwd(), outPath)}`);
 }
 

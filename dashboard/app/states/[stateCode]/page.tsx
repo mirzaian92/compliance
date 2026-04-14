@@ -68,8 +68,8 @@ export default function StatePage({ params }: { params: { stateCode: string } })
         <div className="card">
           <div className="title">No state-specific law data loaded</div>
           <div className="meta">
-            This dashboard reads state law sections from <code>dashboard/data/state_laws.md</code>. This state isn’t in
-            the current file yet.
+            This dashboard reads state law sections from markdown files in <code>dashboard/content/</code>. This state
+            isn’t in the current markdown set yet.
           </div>
         </div>
       ) : (
