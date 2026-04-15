@@ -118,8 +118,145 @@ function stripParensSuffix(title) {
   return title.replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
+function stripMarkdownInline(text) {
+  return text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").trim();
+}
+
+function parseFileAsOf(md) {
+  // Examples:
+  // "# ... — Massachusetts through North Carolina — As of April 11, 2026"
+  // "## ... (April 2026)"
+  const m =
+    md.match(/\bAs of\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})\b/i) ||
+    md.match(/\bAs of\s+([A-Za-z]+\s+\d{4})\b/i) ||
+    md.match(/\((January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\)/i);
+  if (!m) return null;
+  return stripMarkdownInline(m[1] || m[0]).replace(/^\(|\)$/g, "").trim();
+}
+
+function parseMasterStateTables(lines, defaultLastVerified) {
+  const byState = {};
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = (lines[i] || "").trim();
+    if (!line.toLowerCase().startsWith("| state |")) continue;
+
+    const headerParts = line
+      .split("|")
+      .slice(1, -1)
+      .map((p) => p.trim());
+
+    // Skip the separator row (|---|---|...)
+    const sep = (lines[i + 1] || "").trim();
+    if (!sep.startsWith("|")) continue;
+
+    const headers = headerParts.slice(1); // everything after "State"
+
+    for (let r = i + 2; r < lines.length; r++) {
+      const rowLine = (lines[r] || "").trim();
+      if (!rowLine.startsWith("|")) break;
+
+      const cols = rowLine
+        .split("|")
+        .slice(1, -1)
+        .map((c) => c.trim());
+      if (cols.length < 2) continue;
+
+      const stateCell = stripMarkdownInline(cols[0] || "");
+      const stateName = stripParensSuffix(stateCell);
+      const stateCode = NAME_TO_CODE[stateName.toLowerCase()];
+      if (!stateCode) continue;
+
+      const compounds = [];
+      for (let c = 0; c < headers.length; c++) {
+        const compoundHeader = stripMarkdownInline(headers[c] || "");
+        const status = stripMarkdownInline(cols[c + 1] || "");
+        if (!compoundHeader) continue;
+        if (!status) continue;
+        compounds.push({ compound: compoundHeader, status, notes: "" });
+      }
+
+      byState[stateCode] = {
+        state_code: stateCode,
+        state_name: stateName,
+        last_verified: defaultLastVerified,
+        sources: [],
+        compounds,
+        regulatory_notes: null,
+        raw_markdown: rowLine
+      };
+    }
+  }
+
+  return byState;
+}
+
+function parseStateBullets(normalizedMd, defaultLastVerified) {
+  // Pull any "- **State** — <summary>" bullet lines and attach them as "watchlist" notes.
+  const byState = {};
+  const lines = normalizedMd.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- **")) continue;
+    const m = trimmed.match(/^- \*\*([^*]+)\*\*\s*[—:-]\s*(.+)\s*$/);
+    if (!m) continue;
+    const stateName = stripParensSuffix(stripMarkdownInline(m[1] || ""));
+    const stateCode = NAME_TO_CODE[stateName.toLowerCase()];
+    if (!stateCode) continue;
+    const note = stripMarkdownInline(m[2] || "");
+    if (!note) continue;
+    byState[stateCode] = {
+      state_code: stateCode,
+      state_name: stateName,
+      last_verified: defaultLastVerified,
+      sources: [],
+      compounds: [],
+      regulatory_notes: note,
+      raw_markdown: trimmed
+    };
+  }
+  return byState;
+}
+
+function parseInlineStateLists(normalizedMd, defaultLastVerified) {
+  // Example:
+  // **Key KCPA states ...:**\nArizona, Colorado, ...
+  const byState = {};
+  const lines = normalizedMd.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = (lines[i] || "").trim();
+    if (!line.toLowerCase().includes("key kcpa states")) continue;
+    const next = (lines[i + 1] || "").trim();
+    if (!next) continue;
+    const listText = stripMarkdownInline(next);
+    const parts = listText.split(",").map((p) => p.trim()).filter(Boolean);
+    for (const p of parts) {
+      const stateName = stripParensSuffix(p.replace(/\s*\([^)]*\)\s*$/, "").trim());
+      const stateCode = NAME_TO_CODE[stateName.toLowerCase()];
+      if (!stateCode) continue;
+      byState[stateCode] = {
+        state_code: stateCode,
+        state_name: stateName,
+        last_verified: defaultLastVerified,
+        sources: [],
+        compounds: [],
+        regulatory_notes: "Listed as a KCPA (Kratom Consumer Protection Act) framework state for kratom/7‑OH distribution in this report.",
+        raw_markdown: `${line}\n${next}`.trim()
+      };
+    }
+  }
+  return byState;
+}
+
 function parseMarkdown(md, generatedAt) {
   const normalized = fixMojibake(md).replace(/\r\n/g, "\n");
+  const defaultLastVerified = parseFileAsOf(normalized);
+  const linesAll = normalized.split("\n");
+
+  const fromMasterTable = parseMasterStateTables(linesAll, defaultLastVerified);
+  const fromBullets = parseStateBullets(normalized, defaultLastVerified);
+  const fromInlineLists = parseInlineStateLists(normalized, defaultLastVerified);
+
   const chunks = normalized.split(/^###\s+/m);
   chunks.shift(); // preamble
 
@@ -170,6 +307,26 @@ function parseMarkdown(md, generatedAt) {
       regulatory_notes: regulatoryNotes,
       raw_markdown: rawSection
     };
+  }
+
+  // Fill gaps using the master table (less detailed, but better than nothing).
+  for (const [code, section] of Object.entries(fromMasterTable)) {
+    if (!states[code]) states[code] = section;
+    else if (states[code].compounds.length === 0 && section.compounds.length) states[code].compounds = section.compounds;
+    if (states[code].last_verified === null && section.last_verified) states[code].last_verified = section.last_verified;
+  }
+
+  // Attach watchlist/favorable bullet summaries as conservative notes. Do not overwrite full detail sections.
+  for (const [code, section] of Object.entries({ ...fromInlineLists, ...fromBullets })) {
+    if (!states[code]) {
+      states[code] = section;
+      continue;
+    }
+    const existing = states[code].regulatory_notes;
+    const nextNote = section.regulatory_notes;
+    if (!nextNote) continue;
+    if (!existing) states[code].regulatory_notes = nextNote;
+    else if (!existing.includes(nextNote)) states[code].regulatory_notes = `${existing}\n\nWatchlist summary: ${nextNote}`;
   }
 
   return { generated_at: generatedAt, states };

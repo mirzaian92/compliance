@@ -27,6 +27,7 @@ run_daily.ps1/
 
 # Local-only git metadata workaround (if `.git/` is ACL-blocked on Windows)
 ._gitmeta/
+.gitmeta2/
 
 # Next.js dashboard
 node_modules/
@@ -36,6 +37,8 @@ dashboard/node_modules/
 dashboard/.next/
 dashboard/.turbo/
 dashboard/lib/state_laws.generated.json
+dashboard/out/
+dashboard/.vercel/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
