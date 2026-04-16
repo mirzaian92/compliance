@@ -369,6 +369,12 @@ function main() {
   const provenance = {};
   const bestMeta = {}; // stateCode -> { score, mtimeMs, name }
 
+  function isDetailSection(section) {
+    if (!section || typeof section !== "object") return false;
+    const raw = typeof section.raw_markdown === "string" ? section.raw_markdown.trim() : "";
+    return raw.startsWith("### ");
+  }
+
   function sectionScore(section) {
     if (!section || typeof section !== "object") return 0;
     const sources = Array.isArray(section.sources) ? section.sources.length : 0;
@@ -396,11 +402,21 @@ function main() {
       const prevMeta = bestMeta[code];
       const prevScore = prevMeta ? prevMeta.score : sectionScore(prev);
 
+      const prevDetail = isDetailSection(prev);
+      const incomingDetail = isDetailSection(section);
+
+      // If both are detail sections, let filename order determine authority (deterministic overrides).
+      // This avoids subtle "completeness score" differences preventing an intentional override.
       const shouldReplace =
         !prev ||
-        incomingScore > prevScore ||
-        (incomingScore === prevScore &&
-          (!prevMeta || input.mtimeMs > prevMeta.mtimeMs || (input.mtimeMs === prevMeta.mtimeMs && input.name > prevMeta.name)));
+        (prevDetail && incomingDetail
+          ? !prevMeta || input.name > prevMeta.name || (input.name === prevMeta.name && input.mtimeMs > prevMeta.mtimeMs)
+          : incomingScore > prevScore ||
+            (incomingScore === prevScore &&
+              (!prevMeta ||
+                // Prefer deterministic filename ordering over mtime (mtime can vary across CI/Vercel checkouts).
+                input.name > prevMeta.name ||
+                (input.name === prevMeta.name && input.mtimeMs > prevMeta.mtimeMs))));
 
       if (shouldReplace) {
         mergedStates[code] = section;
