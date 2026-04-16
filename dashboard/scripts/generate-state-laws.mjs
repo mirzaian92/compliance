@@ -361,17 +361,52 @@ function main() {
   const generatedAt = inputs.reduce((acc, cur) => (cur.mtimeMs > acc.mtimeMs ? cur : acc), inputs[0]).mtimeIso;
 
   // Merge per-state sections across files. If the same state appears in multiple inputs,
-  // the newest file wins (deterministic; also easiest to reason about).
+  // prefer the most "complete" section (detail sections with sources + compound table).
+  // This prevents bullet-list snippets or master-table rows from overwriting full detail sections
+  // when file mtimes differ across environments (e.g., CI/Vercel checkouts).
   inputs.sort((a, b) => a.mtimeMs - b.mtimeMs || a.name.localeCompare(b.name));
   const mergedStates = {};
   const provenance = {};
+  const bestMeta = {}; // stateCode -> { score, mtimeMs, name }
+
+  function sectionScore(section) {
+    if (!section || typeof section !== "object") return 0;
+    const sources = Array.isArray(section.sources) ? section.sources.length : 0;
+    const compounds = Array.isArray(section.compounds) ? section.compounds.length : 0;
+    const notes = typeof section.regulatory_notes === "string" && section.regulatory_notes.trim() ? 1 : 0;
+    const raw = typeof section.raw_markdown === "string" ? section.raw_markdown.trim() : "";
+
+    // Strongly prefer per-state detail sections (start with "### ").
+    const isDetail = raw.startsWith("### ") ? 1 : 0;
+
+    // Heuristic score:
+    // - detail section: +100
+    // - has compound rows: +50 (scaled)
+    // - has sources: +25 (scaled)
+    // - has notes: +10
+    return isDetail * 100 + Math.min(50, compounds * 6) + Math.min(25, sources * 6) + notes * 10;
+  }
 
   for (const input of inputs) {
     const md = fs.readFileSync(input.fullPath, "utf8");
     const parsed = parseMarkdown(md, generatedAt);
     for (const [code, section] of Object.entries(parsed.states)) {
-      mergedStates[code] = section;
-      provenance[code] = input.name;
+      const incomingScore = sectionScore(section);
+      const prev = mergedStates[code];
+      const prevMeta = bestMeta[code];
+      const prevScore = prevMeta ? prevMeta.score : sectionScore(prev);
+
+      const shouldReplace =
+        !prev ||
+        incomingScore > prevScore ||
+        (incomingScore === prevScore &&
+          (!prevMeta || input.mtimeMs > prevMeta.mtimeMs || (input.mtimeMs === prevMeta.mtimeMs && input.name > prevMeta.name)));
+
+      if (shouldReplace) {
+        mergedStates[code] = section;
+        provenance[code] = input.name;
+        bestMeta[code] = { score: incomingScore, mtimeMs: input.mtimeMs, name: input.name };
+      }
     }
   }
 
